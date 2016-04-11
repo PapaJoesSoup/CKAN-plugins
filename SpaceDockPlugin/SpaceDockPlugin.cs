@@ -12,9 +12,9 @@ namespace SpaceDockPlugin
   public class SpaceDockPlugin : CKAN.IGUIPlugin
   {
 
-    private readonly CKAN.Version VERSION = new CKAN.Version("v1.0.0");
-    private Dictionary<int, CkanModule> SpaceDockToCkanMap = new Dictionary<int, CkanModule>();
+    private readonly CKAN.Version _ckanVersion = new CKAN.Version("v1.0.0");
     private KSPVersion _kspVersion = Main.Instance.CurrentInstance.Version();
+    private Dictionary<int, CkanModule> _spaceDockToCkanMap = new Dictionary<int, CkanModule>();
 
     public override void Initialize()
     {
@@ -28,57 +28,64 @@ namespace SpaceDockPlugin
         {
           if (latest.resources.spacedock != null)
           {
-            int ks_id = int.Parse(latest.resources.spacedock.ToString().Split('/')[4]);
-            SpaceDockToCkanMap[ks_id] = latest;
+            var ksId = int.Parse(latest.resources.spacedock.ToString().Split('/')[2]);
+            _spaceDockToCkanMap[ksId] = latest;
           }
         }
       }
 
-      var webBrowser = new WebBrowser();
-      webBrowser.Dock = System.Windows.Forms.DockStyle.Fill;
-      webBrowser.Url = new System.Uri("http://spacedock.info", System.UriKind.Absolute);
+      var webBrowser = new WebBrowser
+      {
+        Dock = DockStyle.Fill,
+        Url = new Uri("http://spacedock.info", UriKind.Absolute)
+      };
 
       webBrowser.DocumentCompleted += (sender, args) =>
       {
         var thumbnails = GetElementsByClass(webBrowser.Document, "thumbnail");
         foreach (var thumbnail in thumbnails)
         {
-          var url = thumbnail.Children[1].GetAttribute("href");
-          var ksmod_id = int.Parse(url.Split('/')[4]);
-
-          var module = CkanModuleForSpaceDockId(ksmod_id);
-          if (module != null)
+          var url = "";
+          HtmlElement activeElement = null;
+          // Find url
+          foreach (HtmlElement child in thumbnail.Children)
           {
-            thumbnail.Children[0].InnerHtml = "<img src=\"https://raw.githubusercontent.com/KSP-CKAN/CKAN-cmdline/master/assets/ckan-64.png\"/>";
-            if (IsModuleInstalled(module.identifier))
+            if (child.InnerHtml.Contains("href"))
             {
-              thumbnail.Children[0].InnerHtml += "<div style=\"margin-top: 32px;\" class=\"ksp-update\">Installed</div>";
+              url = child.GetAttribute("href");
+              break;
             }
+            if (child.InnerHtml.Contains("ksp-update") && activeElement == null) activeElement = child;
+          }
+          var sdModId = int.Parse(url.Split('/')[2]);
+
+          var module = CkanModuleForSpaceDockId(sdModId);
+          if (module != null && activeElement != null)
+          {
+            activeElement.InnerHtml = "<span class='badge' title='This mod is listed in CKAN.'>CKAN</span>" + activeElement.InnerHtml;
+            if (IsModuleInstalled(module.identifier))
+              activeElement.InnerHtml += "<div style=\"margin-top: 32px;\" class=\"ksp-update\">Installed</div>";
           }
         }
 
         HtmlElement downloadLink = webBrowser.Document.GetElementById("download-link-primary");
-        if (downloadLink == null)
-        {
-          return;
-        }
-
-        int mod_id = -1;
+        if (downloadLink == null) return;
+        int modId = -1;
 
         var downloadUrl = downloadLink.GetAttribute("href");
         if (downloadUrl.StartsWith("#"))
         {
-          mod_id = int.Parse(downloadUrl.Substring(1));
+          modId = int.Parse(downloadUrl.Substring(1));
         }
-        else if (!int.TryParse(downloadUrl.Split('/')[4], out mod_id))
+        else if (!int.TryParse(downloadUrl.Split('/')[2], out modId))
         {
-          mod_id = -1;
+          modId = -1;
         }
 
-        var ckanModule = CkanModuleForSpaceDockId(mod_id);
+        var ckanModule = CkanModuleForSpaceDockId(modId);
         if (ckanModule != null)
         {
-          downloadLink.SetAttribute("href", "#" + mod_id.ToString());
+          downloadLink.SetAttribute("href", "#" + modId.ToString());
 
           if (IsModuleInstalled(ckanModule.identifier))
           {
@@ -134,12 +141,12 @@ namespace SpaceDockPlugin
 
     public override string GetName()
     {
-      return "SpaceDockPlugin by Papa_Joe, based on KerbalStuffPlugin by nlight";
+      return "SpaceDockPlugin by Papa_Joe";
     }
 
     public override CKAN.Version GetVersion()
     {
-      return VERSION;
+      return _ckanVersion;
     }
 
     private bool IsModuleInstalled(string identifier)
@@ -185,11 +192,11 @@ namespace SpaceDockPlugin
 
     private CkanModule CkanModuleForSpaceDockId(int id)
     {
-      if (!SpaceDockToCkanMap.ContainsKey(id))
+      if (!_spaceDockToCkanMap.ContainsKey(id))
       {
         return null;
       }
-      return SpaceDockToCkanMap[id];
+      return _spaceDockToCkanMap[id];
     }
   }
 }
